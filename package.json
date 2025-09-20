@@ -1,0 +1,26 @@
+{
+  "name": "mini-github-monorepo",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Mini GitHub monorepo with React frontend and Node.js backend",
+  "packageManager": "pnpm@8.15.4",
+  "scripts": {
+    "dev": "pnpm -r run dev",
+    "build": "pnpm -r run build",
+    "start": "pnpm --filter backend run start",
+    "test": "pnpm -r run test",
+    "lint": "pnpm -r run lint",
+    "format": "pnpm -r run format",
+    "prepare": "husky install"
+  },
+  "devDependencies": {
+    "husky": "^9.0.11",
+    "lint-staged": "^15.2.2"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,js,jsx,json,css,md}": [
+      "pnpm lint --filter frontend...",
+      "pnpm lint --filter backend..."
+    ]
+  }
+}
