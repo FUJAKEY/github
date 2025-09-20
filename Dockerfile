@@ -14,7 +14,7 @@ COPY frontend/package.json frontend/
 RUN pnpm install --frozen-lockfile
 COPY . .
 RUN pnpm -w build
-RUN pnpm prune --prod --filter backend...
+RUN pnpm prune --prod --workspace-root
 
 # --- Runtime stage ---
 FROM ubuntu:24.04 AS runtime
