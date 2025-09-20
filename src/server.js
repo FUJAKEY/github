@@ -8,9 +8,11 @@ const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 8000;
-const PROJECT_ROOT = path.resolve(__dirname, '..');
-const UPLOAD_DIR = path.join(PROJECT_ROOT, 'uploads');
+const SERVER_ROOT = path.resolve(__dirname, '..');
+const REPO_ROOT = path.join(SERVER_ROOT, 'Repo');
+const UPLOAD_DIR = path.join(SERVER_ROOT, '.uploads');
 
+fs.mkdirSync(REPO_ROOT, { recursive: true });
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
 app.use(express.json({ limit: '50mb' }));
@@ -28,19 +30,24 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage });
 
-function resolveProjectPath(target = '.') {
-  const normalized = target && typeof target === 'string' ? target.trim() : '.';
-  const absolutePath = path.resolve(PROJECT_ROOT, normalized || '.');
-  if (!absolutePath.startsWith(PROJECT_ROOT)) {
-    const error = new Error('Запрошенный путь выходит за пределы директории проекта.');
+function ensureInsideRepo(absolutePath) {
+  const relative = path.relative(REPO_ROOT, absolutePath);
+  if (relative.startsWith('..') || path.isAbsolute(relative)) {
+    const error = new Error('Запрошенный путь выходит за пределы директории Repo.');
     error.statusCode = 400;
     throw error;
   }
   return absolutePath;
 }
 
-function toProjectRelative(absolutePath) {
-  const relative = path.relative(PROJECT_ROOT, absolutePath);
+function resolveRepoPath(target = '.') {
+  const normalized = target && typeof target === 'string' ? target.trim() : '.';
+  const absolutePath = path.resolve(REPO_ROOT, normalized || '.');
+  return ensureInsideRepo(absolutePath);
+}
+
+function toRepoRelative(absolutePath) {
+  const relative = path.relative(REPO_ROOT, absolutePath);
   return relative || '.';
 }
 
@@ -58,20 +65,22 @@ async function extractZipArchive(zipFilePath, destinationPath) {
 
   for (const entry of entries) {
     const entryAbsolutePath = path.resolve(destinationPath, entry.entryName);
-    if (!entryAbsolutePath.startsWith(destinationPath)) {
+    const relativeToDestination = path.relative(destinationPath, entryAbsolutePath);
+    if (relativeToDestination.startsWith('..') || path.isAbsolute(relativeToDestination)) {
       const error = new Error(`Небезопасный путь внутри архива: ${entry.entryName}`);
       error.statusCode = 400;
       throw error;
     }
+    ensureInsideRepo(entryAbsolutePath);
 
     if (entry.isDirectory) {
       await fsPromises.mkdir(entryAbsolutePath, { recursive: true });
-      extractedItems.push(toProjectRelative(entryAbsolutePath));
+      extractedItems.push(toRepoRelative(entryAbsolutePath));
     } else {
       await fsPromises.mkdir(path.dirname(entryAbsolutePath), { recursive: true });
       const data = entry.getData();
       await fsPromises.writeFile(entryAbsolutePath, data);
-      extractedItems.push(toProjectRelative(entryAbsolutePath));
+      extractedItems.push(toRepoRelative(entryAbsolutePath));
     }
   }
 
@@ -88,7 +97,7 @@ async function buildTree(currentPath) {
     }
 
     const childAbsolute = path.join(currentPath, dirent.name);
-    const childRelative = toProjectRelative(childAbsolute);
+    const childRelative = toRepoRelative(childAbsolute);
 
     if (dirent.isSymbolicLink()) {
       continue;
@@ -139,6 +148,7 @@ app.get('/', (req, res) => {
   res.json({
     status: 'ok',
     message: 'Файловый API запущен',
+    repositoryRoot: `/${path.basename(REPO_ROOT)}`,
     routes: {
       downloadArchive: '/download',
       apiBase: '/api',
@@ -159,7 +169,7 @@ app.post('/api/upload', upload.single('file'), async (req, res, next) => {
   const shouldExtract = isTruthy(req.query.extract ?? req.body.extract);
 
   try {
-    const destinationPath = resolveProjectPath(destinationInput || '.');
+    const destinationPath = resolveRepoPath(destinationInput || '.');
     await fsPromises.mkdir(destinationPath, { recursive: true });
 
     if (shouldExtract) {
@@ -175,14 +185,14 @@ app.post('/api/upload', upload.single('file'), async (req, res, next) => {
       return res.json({
         status: 'extracted',
         originalName: req.file.originalname,
-        destination: toProjectRelative(destinationPath),
+        destination: toRepoRelative(destinationPath),
         items: extractedEntries
       });
     }
 
     const finalFileName = path.basename(req.file.originalname);
     const finalDestination = path.join(destinationPath, finalFileName);
-    const finalAbsolutePath = resolveProjectPath(path.relative(PROJECT_ROOT, finalDestination));
+    const finalAbsolutePath = ensureInsideRepo(finalDestination);
 
     await fsPromises.mkdir(path.dirname(finalAbsolutePath), { recursive: true });
     await fsPromises.rename(req.file.path, finalAbsolutePath);
@@ -190,7 +200,7 @@ app.post('/api/upload', upload.single('file'), async (req, res, next) => {
     return res.json({
       status: 'uploaded',
       originalName: req.file.originalname,
-      storedAs: toProjectRelative(finalAbsolutePath)
+      storedAs: toRepoRelative(finalAbsolutePath)
     });
   } catch (error) {
     await fsPromises.rm(req.file.path, { force: true }).catch(() => {});
@@ -201,10 +211,10 @@ app.post('/api/upload', upload.single('file'), async (req, res, next) => {
 async function handleArchiveDownload(req, res, next) {
   try {
     const requestedPath = req.query.path ?? '.';
-    const absoluteTarget = resolveProjectPath(requestedPath || '.');
+    const absoluteTarget = resolveRepoPath(requestedPath || '.');
     const stats = await fsPromises.stat(absoluteTarget);
     const baseName = stats.isDirectory()
-      ? path.basename(absoluteTarget) || path.basename(PROJECT_ROOT)
+      ? path.basename(absoluteTarget) || path.basename(REPO_ROOT)
       : path.basename(absoluteTarget);
 
     res.attachment(`${baseName}.zip`);
@@ -214,7 +224,7 @@ async function handleArchiveDownload(req, res, next) {
     archive.pipe(res);
 
     if (stats.isDirectory()) {
-      const rootFolderName = path.relative(PROJECT_ROOT, absoluteTarget) || baseName;
+      const rootFolderName = path.relative(REPO_ROOT, absoluteTarget) || baseName;
       archive.directory(absoluteTarget, rootFolderName);
     } else {
       archive.file(absoluteTarget, { name: path.basename(absoluteTarget) });
@@ -231,9 +241,9 @@ app.get('/api/download', handleArchiveDownload);
 
 app.get('/api/tree', async (req, res, next) => {
   try {
-    const tree = await buildTree(PROJECT_ROOT);
+    const tree = await buildTree(REPO_ROOT);
     res.json({
-      name: path.basename(PROJECT_ROOT),
+      name: path.basename(REPO_ROOT),
       path: '.',
       type: 'directory',
       children: tree
@@ -250,10 +260,10 @@ app.delete('/api/delete', async (req, res, next) => {
   }
 
   try {
-    const absoluteTarget = resolveProjectPath(targetPath);
+    const absoluteTarget = resolveRepoPath(targetPath);
 
-    if (absoluteTarget === PROJECT_ROOT) {
-      return res.status(400).json({ error: 'Удаление корневой директории проекта запрещено.' });
+    if (absoluteTarget === REPO_ROOT) {
+      return res.status(400).json({ error: 'Удаление корневой директории Repo запрещено.' });
     }
 
     let entityType = 'unknown';
@@ -276,7 +286,7 @@ app.delete('/api/delete', async (req, res, next) => {
     res.json({
       status: 'deleted',
       type: entityType,
-      path: toProjectRelative(absoluteTarget)
+      path: toRepoRelative(absoluteTarget)
     });
   } catch (error) {
     next(error);
