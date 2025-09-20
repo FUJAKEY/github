@@ -1,0 +1,483 @@
+openapi: 3.1.0
+info:
+  title: Mini GitHub API
+  version: 1.0.0
+  description: API для мини-GitHub платформы с файловым git-хранилищем
+servers:
+  - url: http://localhost:8000
+paths:
+  /api/health:
+    get:
+      summary: Проверка состояния сервиса
+      responses:
+        '200':
+          description: Успешный ответ
+  /api/auth/register:
+    post:
+      summary: Регистрация нового пользователя
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthRequest'
+      responses:
+        '201':
+          description: Пользователь зарегистрирован
+  /api/auth/login:
+    post:
+      summary: Аутентификация пользователя
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthRequest'
+      responses:
+        '200':
+          description: Авторизация выполнена
+  /api/auth/refresh:
+    post:
+      summary: Обновление токенов доступа
+      responses:
+        '200':
+          description: Токены обновлены
+  /api/auth/logout:
+    post:
+      summary: Выход пользователя и отзыв refresh токена
+      responses:
+        '204':
+          description: Успешный выход
+  /api/users/me:
+    get:
+      summary: Текущий пользователь
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Данные пользователя
+  /api/repos:
+    get:
+      summary: Получение списка репозиториев
+      parameters:
+        - in: query
+          name: owner
+          schema:
+            type: string
+        - in: query
+          name: search
+          schema:
+            type: string
+        - in: query
+          name: page
+          schema:
+            type: integer
+        - in: query
+          name: pageSize
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Список репозиториев
+    post:
+      summary: Создание нового репозитория
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRepoRequest'
+      responses:
+        '201':
+          description: Репозиторий создан
+  /api/repos/{repoId}:
+    get:
+      summary: Получение информации о репозитории
+      parameters:
+        - in: path
+          name: repoId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Информация о репозитории
+    patch:
+      summary: Обновление метаданных репозитория
+      security:
+        - cookieAuth: []
+      parameters:
+        - in: path
+          name: repoId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateRepoRequest'
+      responses:
+        '200':
+          description: Репозиторий обновлён
+    delete:
+      summary: Удаление репозитория
+      security:
+        - cookieAuth: []
+      parameters:
+        - in: path
+          name: repoId
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Репозиторий удалён
+  /api/repos/{repoId}/branches:
+    get:
+      summary: Список веток
+      parameters:
+        - in: path
+          name: repoId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Список веток
+    post:
+      summary: Создание ветки
+      security:
+        - cookieAuth: []
+      parameters:
+        - in: path
+          name: repoId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBranchRequest'
+      responses:
+        '201':
+          description: Ветка создана
+  /api/repos/{repoId}/branches/{name}:
+    delete:
+      summary: Удаление ветки
+      security:
+        - cookieAuth: []
+      parameters:
+        - in: path
+          name: repoId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: name
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Ветка удалена
+  /api/repos/{repoId}/checkout:
+    post:
+      summary: Переключение ветки
+      security:
+        - cookieAuth: []
+      parameters:
+        - in: path
+          name: repoId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                branch:
+                  type: string
+      responses:
+        '200':
+          description: Ветка активирована
+  /api/repos/{repoId}/commits:
+    get:
+      summary: История коммитов
+      parameters:
+        - in: path
+          name: repoId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: branch
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Список коммитов
+  /api/repos/{repoId}/diff:
+    get:
+      summary: Diff между двумя ревизиями
+      parameters:
+        - in: path
+          name: repoId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: from
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: to
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Текст diff
+  /api/repos/{repoId}/tree:
+    get:
+      summary: Дерево файлов
+      parameters:
+        - in: path
+          name: repoId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: branch
+          schema:
+            type: string
+        - in: query
+          name: path
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Содержимое дерева
+  /api/repos/{repoId}/file:
+    get:
+      summary: Получение содержимого файла
+      parameters:
+        - in: path
+          name: repoId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: path
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: branch
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Содержимое файла
+    put:
+      summary: Сохранение файла
+      security:
+        - cookieAuth: []
+      parameters:
+        - in: path
+          name: repoId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SaveFileRequest'
+      responses:
+        '200':
+          description: Файл сохранён
+    delete:
+      summary: Удаление файла
+      security:
+        - cookieAuth: []
+      parameters:
+        - in: path
+          name: repoId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: path
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: branch
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Файл удалён
+  /api/repos/{repoId}/folder:
+    post:
+      summary: Создание папки
+      security:
+        - cookieAuth: []
+      parameters:
+        - in: path
+          name: repoId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                path:
+                  type: string
+      responses:
+        '201':
+          description: Папка создана
+  /api/repos/{repoId}/archive.zip:
+    get:
+      summary: Загрузка ZIP архива ветки
+      parameters:
+        - in: path
+          name: repoId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: branch
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ZIP архив
+  /api/repos/{repoId}/collaborators:
+    post:
+      summary: Добавление коллаборатора или присоединение по коду
+      security:
+        - cookieAuth: []
+      parameters:
+        - in: path
+          name: repoId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddCollaboratorRequest'
+      responses:
+        '201':
+          description: Коллаборатор добавлен
+  /api/repos/{repoId}/collaborators/{userId}:
+    delete:
+      summary: Удаление коллаборатора
+      security:
+        - cookieAuth: []
+      parameters:
+        - in: path
+          name: repoId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Коллаборатор удалён
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: accessToken
+  schemas:
+    AuthRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+    CreateRepoRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        private:
+          type: boolean
+    UpdateRepoRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        private:
+          type: boolean
+        rotateInviteCode:
+          type: boolean
+    CreateBranchRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+        from:
+          type: string
+    SaveFileRequest:
+      type: object
+      required:
+        - path
+        - content
+        - branch
+        - message
+      properties:
+        path:
+          type: string
+        content:
+          type: string
+        branch:
+          type: string
+        message:
+          type: string
+    AddCollaboratorRequest:
+      type: object
+      properties:
+        userId:
+          type: string
+        inviteCode:
+          type: string
+        role:
+          type: string

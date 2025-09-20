@@ -1,0 +1,16 @@
+node_modules/
+.pnpm-store/
+frontend/node_modules/
+backend/node_modules/
+frontend/dist/
+backend/dist/
+backend/test-data/
+data/
+coverage/
+.DS_Store
+*.log
+*.local
+.idea/
+.vscode/
+backend/test-results/
+frontend/test-results/
