@@ -45,11 +45,23 @@ const createRepoSchema = z.object({
 router.post('/', requireAuth, async (req, res, next) => {
   try {
     const input = createRepoSchema.parse(req.body);
-    const metadata = await createRepository(req.user!.id, {
-      name: input.name,
-      description: input.description ?? '',
-      private: input.private ?? false
-    });
+    const owner = await findUserById(req.user!.id);
+    if (!owner) {
+      res.status(404).json({ message: 'User not found' });
+      return;
+    }
+    const metadata = await createRepository(
+      req.user!.id,
+      {
+        name: input.name,
+        description: input.description ?? '',
+        private: input.private ?? false
+      },
+      {
+        name: owner.email.split('@')[0],
+        email: owner.email
+      }
+    );
     res.status(201).json({ repo: formatRepoResponse(metadata, 'owner') });
   } catch (error) {
     next(error);

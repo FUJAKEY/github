@@ -3,6 +3,7 @@ import type { Request, Response, NextFunction } from 'express';
 import { verifyAccessToken } from '../services/authService.js';
 import { logger } from '../utils/logger.js';
 import { resolveUserPermission, RepoPermission, getRepoById } from '../services/repoService.js';
+import { ensureDefaultBranch } from '../services/gitService.js';
 import { setRequestUser } from '../utils/locks.js';
 
 const ACCESS_COOKIE = 'accessToken';
@@ -63,6 +64,7 @@ export function requireRepoPermission(permission: RepoPermission) {
       res.status(403).json({ message: 'Insufficient repository permissions' });
       return;
     }
+    await ensureDefaultBranch(descriptor.metadata, descriptor.dir);
     res.locals.repo = descriptor;
     next();
   };

@@ -3,7 +3,7 @@ import fsp from 'fs/promises';
 import path from 'path';
 import { randomUUID } from 'crypto';
 
-import { init as gitInit } from 'isomorphic-git';
+import { init as gitInit, add as gitAdd, commit as gitCommit } from 'isomorphic-git';
 import { z } from 'zod';
 
 import { appEnv } from '../config/env.js';
@@ -74,7 +74,16 @@ function getRepoDir(ownerId: string, slug: string): string {
   return path.join(reposRoot, ownerId, slug);
 }
 
-export async function createRepository(ownerId: string, input: CreateRepoInput): Promise<RepoMetadata> {
+export interface CommitIdentity {
+  name: string;
+  email: string;
+}
+
+export async function createRepository(
+  ownerId: string,
+  input: CreateRepoInput,
+  author?: CommitIdentity
+): Promise<RepoMetadata> {
   const parsed = createRepoSchema.parse(input);
   const slug = slugify(parsed.name);
   const repoDir = getRepoDir(ownerId, slug);
@@ -98,6 +107,24 @@ export async function createRepository(ownerId: string, input: CreateRepoInput):
   };
 
   await writeJsonFile(path.join(repoDir, repoJsonName), metadata);
+
+  const commitAuthor: CommitIdentity =
+    author ?? {
+      name: 'mini-github',
+      email: 'noreply@mini-github.local'
+    };
+
+  const initialReadme = `# ${parsed.name}\n\nCreated with mini-github.\n`;
+  const readmePath = path.join(repoDir, 'README.md');
+  await fsp.writeFile(readmePath, initialReadme, 'utf8');
+  await gitAdd({ fs, dir: repoDir, filepath: 'README.md' });
+  await gitCommit({
+    fs,
+    dir: repoDir,
+    message: 'Initial commit',
+    author: commitAuthor,
+    committer: commitAuthor
+  });
 
   await logAudit({
     type: 'repo.created',

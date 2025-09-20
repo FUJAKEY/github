@@ -41,6 +41,45 @@ function isMissingRefError(error: unknown): boolean {
 
 const pipeline = promisify(stream.pipeline);
 
+function httpError(status: number, message: string): Error & { status: number } {
+  const err = new Error(message) as Error & { status: number };
+  err.status = status;
+  return err;
+}
+
+const DEFAULT_COMMIT_AUTHOR = {
+  name: 'mini-github',
+  email: 'noreply@mini-github.local'
+};
+
+async function bootstrapDefaultBranch(repo: RepoMetadata, repoDir: string): Promise<void> {
+  const branches = await gitListBranches({ fs, dir: repoDir });
+  if (branches.length > 0) {
+    return;
+  }
+  const readmeRelative = 'README.md';
+  const readmePath = path.join(repoDir, readmeRelative);
+  if (!(await pathExists(readmePath))) {
+    const placeholder = `# ${repo.name}\n\nInitialized via mini-github.\n`;
+    await ensureDir(path.dirname(readmePath));
+    await fsp.writeFile(readmePath, placeholder, 'utf8');
+  }
+  await gitAdd({ fs, dir: repoDir, filepath: readmeRelative });
+  await gitCommit({
+    fs,
+    dir: repoDir,
+    message: 'Initialize default branch',
+    author: DEFAULT_COMMIT_AUTHOR,
+    committer: DEFAULT_COMMIT_AUTHOR
+  });
+}
+
+export async function ensureDefaultBranch(repo: RepoMetadata, repoDir: string): Promise<void> {
+  await withRepoLock(repo.id, async () => {
+    await bootstrapDefaultBranch(repo, repoDir);
+  });
+}
+
 export interface BranchInfo {
   name: string;
   isDefault: boolean;
@@ -61,8 +100,21 @@ export async function getCurrentBranch(repoDir: string): Promise<string> {
   return current ?? 'main';
 }
 
-export async function createBranch(repo: RepoMetadata, repoDir: string, branch: string, from = repo.defaultBranch): Promise<void> {
+export async function createBranch(
+  repo: RepoMetadata,
+  repoDir: string,
+  branch: string,
+  from = repo.defaultBranch
+): Promise<void> {
   await withRepoLock(repo.id, async () => {
+    await bootstrapDefaultBranch(repo, repoDir);
+    const branches = await gitListBranches({ fs, dir: repoDir });
+    if (!branches.includes(from)) {
+      throw httpError(400, `Base branch "${from}" does not exist`);
+    }
+    if (branches.includes(branch)) {
+      throw httpError(409, `Branch "${branch}" already exists`);
+    }
     await gitCheckout({ fs, dir: repoDir, ref: from });
     await gitBranch({ fs, dir: repoDir, ref: branch, checkout: false });
   });
@@ -70,9 +122,17 @@ export async function createBranch(repo: RepoMetadata, repoDir: string, branch: 
 
 export async function deleteBranch(repo: RepoMetadata, repoDir: string, branch: string): Promise<void> {
   if (branch === repo.defaultBranch) {
-    throw new Error('Cannot delete default branch');
+    throw httpError(400, 'Cannot delete default branch');
   }
   await withRepoLock(repo.id, async () => {
+    await bootstrapDefaultBranch(repo, repoDir);
+    const branches = await gitListBranches({ fs, dir: repoDir });
+    if (!branches.includes(branch)) {
+      throw httpError(404, `Branch "${branch}" not found`);
+    }
+    if (branches.length <= 1) {
+      throw httpError(400, 'Cannot delete the last remaining branch');
+    }
     await gitDeleteBranch({ fs, dir: repoDir, ref: branch });
   });
 }
