@@ -1,0 +1,20 @@
+{
+  "name": "project-file-api",
+  "version": "1.0.0",
+  "description": "Сервер управления проектными файлами на Express",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "echo \"Тесты не настроены\""
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "adm-zip": "^0.5.16",
+    "archiver": "^7.0.1",
+    "express": "^5.1.0",
+    "multer": "^2.0.2"
+  }
+}
