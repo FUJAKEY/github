@@ -16,12 +16,13 @@ export interface RepoCollaborator {
   invitedAt: string;
 }
 
-export type RepoAccessTokenPermission = 'read' | 'write';
+export type AccountAccessTokenPermission = 'read' | 'write';
 
-export interface RepoAccessToken {
+export interface AccountAccessToken {
   id: string;
+  userId: string;
   name: string;
-  permission: RepoAccessTokenPermission;
+  permission: AccountAccessTokenPermission;
   createdAt: string;
   lastUsedAt?: string;
 }

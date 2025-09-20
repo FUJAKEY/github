@@ -1,7 +1,7 @@
 import type { RepoActor } from '../middleware/auth.js';
 import type { RepoPermission } from '../services/repoService.js';
 
-import type { RepoAccessToken, RepoMetadata } from './domain.js';
+import type { AccountAccessToken, RepoMetadata } from './domain.js';
 
 declare global {
   namespace Express {
@@ -15,6 +15,7 @@ declare global {
     }
 
     interface Locals {
+      apiToken?: AccountAccessToken;
       repo?: {
         metadata: RepoMetadata;
         dir: string;
@@ -24,7 +25,7 @@ declare global {
         permission: RepoPermission;
         userPermission: RepoPermission;
         tokenPermission: RepoPermission;
-        token?: RepoAccessToken;
+        token?: AccountAccessToken;
       };
     }
   }

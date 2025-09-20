@@ -11,6 +11,7 @@ import { RepoBranchesPage } from '../pages/repo/RepoBranchesPage.tsx';
 import { RepoCommitsPage } from '../pages/repo/RepoCommitsPage.tsx';
 import { RepoSettingsPage } from '../pages/repo/RepoSettingsPage.tsx';
 import { DocsPage } from '../pages/docs/DocsPage.tsx';
+import { AccountSettingsPage } from '../pages/account/AccountSettingsPage.tsx';
 
 export const router = createBrowserRouter([
   {
@@ -32,6 +33,7 @@ export const router = createBrowserRouter([
     children: [
       { index: true, element: <MyReposPage /> },
       { path: 'docs', element: <DocsPage /> },
+      { path: 'account', element: <AccountSettingsPage /> },
       {
         path: 'repos/:repoId',
         element: <RepoLayout />,

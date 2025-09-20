@@ -5,6 +5,7 @@ import { ensureDir, ensureFile } from '../utils/fs.js';
 
 const requiredFiles: Array<{ path: string; initial: string }> = [
   { path: path.join(appEnv.reposRoot, 'users', 'users.json'), initial: '[]' },
+  { path: path.join(appEnv.reposRoot, 'users', 'api-tokens.json'), initial: '[]' },
   { path: path.join(appEnv.reposRoot, 'auth', 'refresh-tokens.json'), initial: '[]' },
   { path: path.join(appEnv.reposRoot, 'audit', 'log.ndjson'), initial: '' }
 ];

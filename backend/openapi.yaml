@@ -56,6 +56,59 @@ paths:
       responses:
         '200':
           description: Данные пользователя
+  /api/users/me/tokens:
+    get:
+      summary: Список персональных токенов
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Коллекция токенов пользователя
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tokens:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AccountToken'
+    post:
+      summary: Создание персонального токена
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAccountTokenRequest'
+      responses:
+        '201':
+          description: Токен создан
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    $ref: '#/components/schemas/AccountToken'
+                  secret:
+                    type: string
+  /api/users/me/tokens/{tokenId}:
+    delete:
+      summary: Удаление персонального токена
+      security:
+        - cookieAuth: []
+      parameters:
+        - in: path
+          name: tokenId
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Токен удалён
   /api/repos:
     get:
       summary: Получение списка репозиториев
@@ -97,10 +150,10 @@ paths:
       summary: Получение информации о репозитории
       description: >-
         Возвращает метаданные репозитория. Для приватных репозиториев требуется
-        авторизация через cookie или токен репозитория.
+        авторизация через cookie или персональный токен аккаунта.
       security:
         - cookieAuth: []
-        - repoTokenAuth: []
+        - accountTokenAuth: []
         - {}
       parameters:
         - in: path
@@ -148,10 +201,10 @@ paths:
       summary: Список веток
       description: >-
         Возвращает ветки репозитория. Для приватных репозиториев используйте
-        cookie-сессию или заголовок `X-Repo-Token`.
+        cookie-сессию или заголовок `X-Account-Token`.
       security:
         - cookieAuth: []
-        - repoTokenAuth: []
+        - accountTokenAuth: []
         - {}
       parameters:
         - in: path
@@ -167,7 +220,7 @@ paths:
       description: Требуется право записи (пользователь или токен `write`).
       security:
         - cookieAuth: []
-        - repoTokenAuth: []
+        - accountTokenAuth: []
       parameters:
         - in: path
           name: repoId
@@ -189,7 +242,7 @@ paths:
       description: Требуется право записи (cookie или токен `write`).
       security:
         - cookieAuth: []
-        - repoTokenAuth: []
+        - accountTokenAuth: []
       parameters:
         - in: path
           name: repoId
@@ -210,7 +263,7 @@ paths:
       description: Требуется право записи (cookie или токен `write`).
       security:
         - cookieAuth: []
-        - repoTokenAuth: []
+        - accountTokenAuth: []
       parameters:
         - in: path
           name: repoId
@@ -232,10 +285,10 @@ paths:
   /api/repos/{repoId}/commits:
     get:
       summary: История коммитов
-      description: Доступно с cookie или токеном репозитория (для приватных проектов).
+      description: Доступно с cookie или персональным токеном аккаунта (для приватных проектов).
       security:
         - cookieAuth: []
-        - repoTokenAuth: []
+        - accountTokenAuth: []
         - {}
       parameters:
         - in: path
@@ -253,10 +306,10 @@ paths:
   /api/repos/{repoId}/diff:
     get:
       summary: Diff между двумя ревизиями
-      description: Доступно с cookie или токеном репозитория.
+      description: Доступно с cookie или персональным токеном аккаунта.
       security:
         - cookieAuth: []
-        - repoTokenAuth: []
+        - accountTokenAuth: []
         - {}
       parameters:
         - in: path
@@ -283,7 +336,7 @@ paths:
       description: Возвращает структуру файлов; поддерживает токены (`read` или `write`).
       security:
         - cookieAuth: []
-        - repoTokenAuth: []
+        - accountTokenAuth: []
         - {}
       parameters:
         - in: path
@@ -308,7 +361,7 @@ paths:
       description: Доступно для приватных репозиториев через cookie или токен (`read`).
       security:
         - cookieAuth: []
-        - repoTokenAuth: []
+        - accountTokenAuth: []
         - {}
       parameters:
         - in: path
@@ -333,7 +386,7 @@ paths:
       description: Требует права записи (cookie или токен `write`).
       security:
         - cookieAuth: []
-        - repoTokenAuth: []
+        - accountTokenAuth: []
       parameters:
         - in: path
           name: repoId
@@ -354,7 +407,7 @@ paths:
       description: Требует права записи (cookie или токен `write`).
       security:
         - cookieAuth: []
-        - repoTokenAuth: []
+        - accountTokenAuth: []
       parameters:
         - in: path
           name: repoId
@@ -379,7 +432,7 @@ paths:
       description: Требует права записи (cookie или токен `write`).
       security:
         - cookieAuth: []
-        - repoTokenAuth: []
+        - accountTokenAuth: []
       parameters:
         - in: path
           name: repoId
@@ -404,7 +457,7 @@ paths:
       description: Поддерживает cookie и токены (`read` или `write`).
       security:
         - cookieAuth: []
-        - repoTokenAuth: []
+        - accountTokenAuth: []
         - {}
       parameters:
         - in: path
@@ -419,79 +472,6 @@ paths:
       responses:
         '200':
           description: ZIP архив
-  /api/repos/{repoId}/tokens:
-    get:
-      summary: Список токенов репозитория
-      description: Доступно только владельцу. Возвращает токены без открытого секрета.
-      security:
-        - cookieAuth: []
-      parameters:
-        - in: path
-          name: repoId
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          description: Коллекция токенов
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  tokens:
-                    type: array
-                    items:
-                      $ref: '#/components/schemas/RepoToken'
-    post:
-      summary: Создание токена репозитория
-      description: Доступно только владельцу. Секрет отображается один раз в ответе.
-      security:
-        - cookieAuth: []
-      parameters:
-        - in: path
-          name: repoId
-          required: true
-          schema:
-            type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CreateRepoTokenRequest'
-      responses:
-        '201':
-          description: Токен создан
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  token:
-                    $ref: '#/components/schemas/RepoToken'
-                  secret:
-                    type: string
-  /api/repos/{repoId}/tokens/{tokenId}:
-    delete:
-      summary: Удаление токена репозитория
-      description: Доступно только владельцу.
-      security:
-        - cookieAuth: []
-      parameters:
-        - in: path
-          name: repoId
-          required: true
-          schema:
-            type: string
-        - in: path
-          name: tokenId
-          required: true
-          schema:
-            type: string
-      responses:
-        '204':
-          description: Токен удалён
   /api/repos/{repoId}/collaborators:
     post:
       summary: Добавление коллаборатора или присоединение по коду
@@ -537,13 +517,14 @@ components:
       type: apiKey
       in: cookie
       name: accessToken
-    repoTokenAuth:
+    accountTokenAuth:
       type: apiKey
       in: header
-      name: X-Repo-Token
+      name: X-Account-Token
       description: >-
-        Токен доступа к репозиторию. Передавайте значение в формате
-        `tokenId.secret` в заголовке `X-Repo-Token` или как `Authorization: Token <значение>`.
+        Персональный токен пользователя. Передавайте значение в формате
+        `tokenId.secret` в заголовке `X-Account-Token` или как
+        `Authorization: Token <значение>`.
   schemas:
     AuthRequest:
       type: object
@@ -612,10 +593,12 @@ components:
           type: string
         role:
           type: string
-    RepoToken:
+    AccountToken:
       type: object
       properties:
         id:
+          type: string
+        userId:
           type: string
         name:
           type: string
@@ -631,7 +614,7 @@ components:
           type: string
           format: date-time
           nullable: true
-    CreateRepoTokenRequest:
+    CreateAccountTokenRequest:
       type: object
       required:
         - name

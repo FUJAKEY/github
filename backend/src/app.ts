@@ -32,7 +32,28 @@ export function createApp() {
       credentials: true
     })
   );
-  app.use(helmet());
+
+  const defaultDirectives = helmet.contentSecurityPolicy.getDefaultDirectives();
+  const contentSecurityPolicy = {
+    ...defaultDirectives,
+    'script-src': Array.from(new Set([...(defaultDirectives['script-src'] ?? []), "'unsafe-inline'", "'unsafe-eval'"])),
+    'style-src': Array.from(
+      new Set([...(defaultDirectives['style-src'] ?? []), "'unsafe-inline'", 'https:'])
+    ),
+    'img-src': Array.from(new Set([...(defaultDirectives['img-src'] ?? []), 'data:', 'blob:'])),
+    'font-src': Array.from(new Set([...(defaultDirectives['font-src'] ?? []), 'https:', 'data:'])),
+    'connect-src': Array.from(new Set([...(defaultDirectives['connect-src'] ?? ["'self'"]), 'blob:'])),
+    'worker-src': ["'self'", 'blob:']
+  };
+
+  app.use(
+    helmet({
+      contentSecurityPolicy: {
+        directives: contentSecurityPolicy
+      },
+      crossOriginEmbedderPolicy: false
+    })
+  );
   app.use(cookieParser());
   app.use(express.json({ limit: '5mb' }));
   app.use(

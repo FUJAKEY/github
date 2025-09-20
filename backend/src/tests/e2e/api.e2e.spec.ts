@@ -97,4 +97,16 @@ test('user can create repo, branch, commit and download zip', async ({ request }
   expect(zipRes.status()).toBe(200);
   const buffer = await zipRes.body();
   expect(buffer.length).toBeGreaterThan(0);
+
+  const tokenRes = await request.post(`${baseURL}/api/users/me/tokens`, {
+    data: { name: 'ci-reader', permission: 'read' }
+  });
+  expect(tokenRes.status()).toBe(201);
+  const tokenPayload = await tokenRes.json();
+  const tokenSecret = tokenPayload.secret as string;
+
+  const tokenBranches = await request.get(`${baseURL}/api/repos/${repoId}/branches`, {
+    headers: { 'x-account-token': tokenSecret }
+  });
+  expect(tokenBranches.status()).toBe(200);
 });

@@ -8,7 +8,8 @@ import { CreateRepoForm } from '../pages/dashboard/CreateRepoForm.tsx';
 
 const navItems = [
   { to: '/', label: 'Мои репозитории', end: true },
-  { to: '/docs', label: 'Документация' }
+  { to: '/docs', label: 'Документация' },
+  { to: '/account', label: 'Аккаунт' }
 ];
 
 export function AppLayout() {

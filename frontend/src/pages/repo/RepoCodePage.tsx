@@ -203,7 +203,9 @@ export function RepoCodePage() {
             theme="vs-dark"
             value={editorValue}
             onChange={(value) => setEditorValue(value ?? '')}
-            options={{ minimap: { enabled: false }, fontSize: 14 }}
+            height="100%"
+            className="h-full"
+            options={{ minimap: { enabled: false }, fontSize: 14, automaticLayout: true }}
           />
         )}
       </div>
