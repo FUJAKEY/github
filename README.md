@@ -84,6 +84,29 @@ docker run --rm -p 8000:8000 project-file-api
 
 Ответ `200` содержит тип удалённого объекта и его относительный путь.
 
+### `POST /api/move`
+Перемещает или переименовывает файл/директорию по аналогии с `mv`.
+
+Тело запроса (JSON):
+
+```json
+{
+  "source": "relative/source/path",
+  "destination": "relative/destination/path"
+}
+```
+
+Особенности:
+
+- Если `destination` указывает на существующую директорию, объект перемещается внутрь неё с исходным именем.
+- Уже существующий целевой путь перезаписывается (аналог `mv -f`).
+- Перемещение корня `Repo` или в собственные подкаталоги запрещено.
+
+### `DELETE /api/deleteall`
+Полностью очищает содержимое каталога `Repo`, сохраняя саму директорию.
+
+Ответ `200` содержит количество удалённых объектов и их относительные пути.
+
 ## Проверка API через curl
 
 ```bash
@@ -103,6 +126,14 @@ curl -OJ http://localhost:8000/download
 curl -X DELETE -H "Content-Type: application/json" \
   -d '{"targetPath":"docs/README.md"}' \
   http://localhost:8000/api/delete
+
+# Перемещение файла в другую директорию
+curl -X POST -H "Content-Type: application/json" \
+  -d '{"source":"docs/README.md","destination":"archived"}' \
+  http://localhost:8000/api/move
+
+# Полная очистка каталога Repo
+curl -X DELETE http://localhost:8000/api/deleteall
 ```
 
 ## Замечания по безопасности

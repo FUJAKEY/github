@@ -187,7 +187,9 @@ app.get('/', (req, res) => {
       upload: '/api/upload',
       tree: '/api/tree',
       apiDownload: '/api/download',
-      delete: '/api/delete'
+      delete: '/api/delete',
+      move: '/api/move',
+      deleteAll: '/api/deleteall'
     }
   });
 });
@@ -293,6 +295,92 @@ app.get('/api/tree', async (req, res, next) => {
   }
 });
 
+app.post('/api/move', async (req, res, next) => {
+  const { source, destination } = req.body || {};
+
+  if (!source || typeof source !== 'string' || !source.trim()) {
+    return res.status(400).json({ error: 'Параметр source обязателен.' });
+  }
+
+  if (!destination || typeof destination !== 'string' || !destination.trim()) {
+    return res.status(400).json({ error: 'Параметр destination обязателен.' });
+  }
+
+  try {
+    const sourcePath = resolveRepoPath(source);
+
+    if (sourcePath === REPO_ROOT) {
+      return res.status(400).json({ error: 'Перемещение корневой директории Repo запрещено.' });
+    }
+
+    let sourceStats;
+    try {
+      sourceStats = await fsPromises.lstat(sourcePath);
+    } catch (statError) {
+      if (statError.code === 'ENOENT') {
+        return res.status(404).json({ error: 'Исходный путь не существует.' });
+      }
+      throw statError;
+    }
+
+    let destinationPath = resolveRepoPath(destination);
+    let destinationStats = null;
+
+    try {
+      destinationStats = await fsPromises.lstat(destinationPath);
+    } catch (destError) {
+      if (destError.code !== 'ENOENT') {
+        throw destError;
+      }
+      destinationStats = null;
+    }
+
+    if (destinationStats && destinationStats.isDirectory()) {
+      destinationPath = ensureInsideRepo(path.join(destinationPath, path.basename(sourcePath)));
+      try {
+        destinationStats = await fsPromises.lstat(destinationPath);
+      } catch (nestedError) {
+        if (nestedError.code !== 'ENOENT') {
+          throw nestedError;
+        }
+        destinationStats = null;
+      }
+    }
+
+    if (destinationPath === sourcePath) {
+      return res.status(400).json({ error: 'Исходный и целевой путь совпадают.' });
+    }
+
+    const relativeFromSource = path.relative(sourcePath, destinationPath);
+    if (relativeFromSource && !relativeFromSource.startsWith('..')) {
+      return res.status(400).json({ error: 'Нельзя переместить объект внутрь самого себя.' });
+    }
+
+    await fsPromises.mkdir(path.dirname(destinationPath), { recursive: true });
+
+    if (destinationStats) {
+      await fsPromises.rm(destinationPath, { recursive: true, force: true });
+    }
+
+    await fsPromises.rename(sourcePath, destinationPath);
+
+    const itemType = sourceStats.isDirectory()
+      ? 'directory'
+      : sourceStats.isFile()
+        ? 'file'
+        : 'other';
+
+    res.json({
+      status: 'moved',
+      type: itemType,
+      from: toRepoRelative(sourcePath),
+      to: toRepoRelative(destinationPath)
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.delete('/api/delete', async (req, res, next) => {
   const { targetPath } = req.body || {};
   if (!targetPath || typeof targetPath !== 'string') {
@@ -327,6 +415,27 @@ app.delete('/api/delete', async (req, res, next) => {
       status: 'deleted',
       type: entityType,
       path: toRepoRelative(absoluteTarget)
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.delete('/api/deleteall', async (req, res, next) => {
+  try {
+    const entries = await fsPromises.readdir(REPO_ROOT);
+    const removed = [];
+
+    for (const entry of entries) {
+      const entryPath = path.join(REPO_ROOT, entry);
+      removed.push(toRepoRelative(entryPath));
+      await fsPromises.rm(entryPath, { recursive: true, force: true });
+    }
+
+    res.json({
+      status: 'cleared',
+      removedCount: removed.length,
+      removed
     });
   } catch (error) {
     next(error);
