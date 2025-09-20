@@ -14,6 +14,7 @@ COPY frontend/package.json frontend/
 RUN pnpm install --frozen-lockfile
 COPY . .
 RUN pnpm -w build
+RUN pnpm prune --prod --filter backend...
 
 # --- Runtime stage ---
 FROM ubuntu:24.04 AS runtime
@@ -30,7 +31,8 @@ COPY backend/package.json backend/
 COPY backend/openapi.yaml backend/
 COPY --from=build /app/backend/dist ./backend/dist
 COPY --from=build /app/frontend/dist ./frontend/dist
-RUN pnpm install --frozen-lockfile --prod --filter backend...
+COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/backend/node_modules ./backend/node_modules
 COPY docker-entrypoint.sh ./docker-entrypoint.sh
 RUN useradd -m appuser && mkdir -p /app/data && chown -R appuser:appuser /app && chmod +x docker-entrypoint.sh
 ENV NODE_ENV=production
