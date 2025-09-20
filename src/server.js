@@ -226,11 +226,11 @@ app.post('/api/upload', upload.single('file'), async (req, res, next) => {
     const finalDestination = path.join(destinationPath, finalFileName);
     const finalAbsolutePath = ensureInsideRepo(finalDestination);
 
+    let overwritten = false;
     try {
-      await fsPromises.access(finalAbsolutePath, fs.constants.F_OK);
-      return res.status(409).json({
-        error: `Файл ${toRepoRelative(finalAbsolutePath)} уже существует. Удалите его или выберите другое имя.`
-      });
+      await fsPromises.lstat(finalAbsolutePath);
+      overwritten = true;
+      await fsPromises.rm(finalAbsolutePath, { recursive: true, force: true });
     } catch (accessError) {
       if (accessError.code !== 'ENOENT') {
         throw accessError;
@@ -241,7 +241,7 @@ app.post('/api/upload', upload.single('file'), async (req, res, next) => {
     await fsPromises.writeFile(finalAbsolutePath, req.file.buffer);
 
     return res.json({
-      status: 'uploaded',
+      status: overwritten ? 'overwritten' : 'uploaded',
       originalName: req.file.originalname,
       storedAs: toRepoRelative(finalAbsolutePath)
     });
