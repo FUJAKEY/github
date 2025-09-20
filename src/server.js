@@ -10,25 +10,11 @@ const app = express();
 const PORT = process.env.PORT || 8000;
 const SERVER_ROOT = path.resolve(__dirname, '..');
 const REPO_ROOT = path.join(SERVER_ROOT, 'Repo');
-const UPLOAD_DIR = path.join(SERVER_ROOT, '.uploads');
-
 fs.mkdirSync(REPO_ROOT, { recursive: true });
-fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
 app.use(express.json({ limit: '50mb' }));
 
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, UPLOAD_DIR);
-  },
-  filename: (req, file, cb) => {
-    const timestamp = Date.now();
-    const sanitizedOriginal = file.originalname.replace(/[^a-zA-Z0-9_.\-]/g, '_');
-    cb(null, `${timestamp}-${sanitizedOriginal}`);
-  }
-});
-
-const upload = multer({ storage });
+const upload = multer({ storage: multer.memoryStorage() });
 
 function ensureInsideRepo(absolutePath) {
   const relative = path.relative(REPO_ROOT, absolutePath);
@@ -58,8 +44,8 @@ function isTruthy(value) {
   return ['true', '1', 'yes', 'on'].includes(String(value).toLowerCase());
 }
 
-async function extractZipArchive(zipFilePath, destinationPath) {
-  const zip = new AdmZip(zipFilePath);
+async function extractZipArchive(zipBuffer, destinationPath) {
+  const zip = new AdmZip(zipBuffer);
   const entries = zip.getEntries();
   const extractedItems = [];
 
@@ -175,12 +161,10 @@ app.post('/api/upload', upload.single('file'), async (req, res, next) => {
     if (shouldExtract) {
       const extension = path.extname(req.file.originalname).toLowerCase();
       if (extension !== '.zip') {
-        await fsPromises.rm(req.file.path, { force: true });
         return res.status(400).json({ error: 'Параметр extract=true доступен только для ZIP-архивов.' });
       }
 
-      const extractedEntries = await extractZipArchive(req.file.path, destinationPath);
-      await fsPromises.rm(req.file.path, { force: true });
+      const extractedEntries = await extractZipArchive(req.file.buffer, destinationPath);
 
       return res.json({
         status: 'extracted',
@@ -195,7 +179,7 @@ app.post('/api/upload', upload.single('file'), async (req, res, next) => {
     const finalAbsolutePath = ensureInsideRepo(finalDestination);
 
     await fsPromises.mkdir(path.dirname(finalAbsolutePath), { recursive: true });
-    await fsPromises.rename(req.file.path, finalAbsolutePath);
+    await fsPromises.writeFile(finalAbsolutePath, req.file.buffer);
 
     return res.json({
       status: 'uploaded',
@@ -203,7 +187,6 @@ app.post('/api/upload', upload.single('file'), async (req, res, next) => {
       storedAs: toRepoRelative(finalAbsolutePath)
     });
   } catch (error) {
-    await fsPromises.rm(req.file.path, { force: true }).catch(() => {});
     next(error);
   }
 });

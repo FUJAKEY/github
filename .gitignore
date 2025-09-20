@@ -1,6 +1,4 @@
 node_modules/
-uploads/
-.uploads/
 .env
 npm-debug.log*
 .DS_Store

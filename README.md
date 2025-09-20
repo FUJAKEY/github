@@ -89,8 +89,8 @@ docker run --rm -p 8000:8000 project-file-api
 # Дерево каталога Repo
 curl http://localhost:8000/api/tree | jq
 
-# Загрузка файла
-curl -F "file=@README.md" -F "destination=uploads" http://localhost:8000/api/upload
+# Загрузка файла в подкаталог Repo/docs
+curl -F "file=@README.md" -F "destination=docs" http://localhost:8000/api/upload
 
 # Загрузка и распаковка ZIP-архива
 curl -F "file=@archive.zip" "http://localhost:8000/api/upload?extract=true"
@@ -100,7 +100,7 @@ curl -OJ http://localhost:8000/download
 
 # Удаление файла
 curl -X DELETE -H "Content-Type: application/json" \
-  -d '{"targetPath":"uploads/README.md"}' \
+  -d '{"targetPath":"docs/README.md"}' \
   http://localhost:8000/api/delete
 ```
 
