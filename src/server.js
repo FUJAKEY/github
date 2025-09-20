@@ -74,23 +74,6 @@ async function extractZipArchive(zipBuffer, destinationPath) {
       }
       seenFilePaths.add(normalizedAbsolutePath);
     }
-
-    try {
-      const stats = await fsPromises.stat(entryAbsolutePath);
-      if (entry.isDirectory && stats.isDirectory()) {
-        continue;
-      }
-
-      const conflictError = new Error(
-        `Путь ${toRepoRelative(entryAbsolutePath)} уже существует. Удалите его перед распаковкой архива.`
-      );
-      conflictError.statusCode = 409;
-      throw conflictError;
-    } catch (error) {
-      if (error.code !== 'ENOENT') {
-        throw error;
-      }
-    }
   }
 
   for (const entry of entries) {
@@ -104,10 +87,29 @@ async function extractZipArchive(zipBuffer, destinationPath) {
     ensureInsideRepo(entryAbsolutePath);
 
     if (entry.isDirectory) {
+      try {
+        const stats = await fsPromises.lstat(entryAbsolutePath);
+        if (!stats.isDirectory()) {
+          await fsPromises.rm(entryAbsolutePath, { recursive: true, force: true });
+        }
+      } catch (error) {
+        if (error.code !== 'ENOENT') {
+          throw error;
+        }
+      }
+
       await fsPromises.mkdir(entryAbsolutePath, { recursive: true });
       extractedItems.push(toRepoRelative(entryAbsolutePath));
     } else {
       await fsPromises.mkdir(path.dirname(entryAbsolutePath), { recursive: true });
+      try {
+        await fsPromises.rm(entryAbsolutePath, { recursive: true, force: true });
+      } catch (rmError) {
+        if (rmError.code !== 'ENOENT') {
+          throw rmError;
+        }
+      }
+
       const data = entry.getData();
       await fsPromises.writeFile(entryAbsolutePath, data);
       extractedItems.push(toRepoRelative(entryAbsolutePath));
