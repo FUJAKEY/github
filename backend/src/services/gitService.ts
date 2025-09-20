@@ -29,6 +29,16 @@ import { RepoMetadata } from '../types/domain.js';
 import { withRepoLock } from '../utils/locks.js';
 import { ensureDir, pathExists } from '../utils/fs.js';
 
+function isMissingRefError(error: unknown): boolean {
+  if (error instanceof gitErrors.NotFoundError) {
+    return true;
+  }
+  if (error instanceof Error && /Could not find/i.test(error.message)) {
+    return true;
+  }
+  return false;
+}
+
 const pipeline = promisify(stream.pipeline);
 
 export interface BranchInfo {
@@ -83,15 +93,22 @@ export interface CommitInfo {
 }
 
 export async function listCommits(repoDir: string, branch: string, limit = 50): Promise<CommitInfo[]> {
-  const log = await gitLog({ fs, dir: repoDir, ref: branch, depth: limit });
-  return log.map((entry) => ({
-    oid: entry.oid,
-    message: entry.commit.message,
-    author: entry.commit.author as CommitInfo['author'],
-    committer: entry.commit.committer as CommitInfo['committer'],
-    committedAt: new Date(entry.commit.author.timestamp * 1000).toISOString(),
-    parent: entry.commit.parent?.[0]
-  }));
+  try {
+    const log = await gitLog({ fs, dir: repoDir, ref: branch, depth: limit });
+    return log.map((entry) => ({
+      oid: entry.oid,
+      message: entry.commit.message,
+      author: entry.commit.author as CommitInfo['author'],
+      committer: entry.commit.committer as CommitInfo['committer'],
+      committedAt: new Date(entry.commit.author.timestamp * 1000).toISOString(),
+      parent: entry.commit.parent?.[0]
+    }));
+  } catch (error) {
+    if (isMissingRefError(error)) {
+      return [];
+    }
+    throw error;
+  }
 }
 
 export async function getDiff(repoDir: string, from: string, to: string): Promise<string> {
@@ -107,7 +124,15 @@ export interface TreeNode {
 }
 
 export async function getTree(repoDir: string, branch: string, targetPath = ''): Promise<TreeNode[]> {
-  const files = await gitListFiles({ fs, dir: repoDir, ref: branch });
+  let files: string[] = [];
+  try {
+    files = await gitListFiles({ fs, dir: repoDir, ref: branch });
+  } catch (error) {
+    if (isMissingRefError(error)) {
+      return [];
+    }
+    throw error;
+  }
   const normalized = targetPath ? targetPath.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '') : '';
   const prefix = normalized ? `${normalized}/` : '';
   const treeMap = new Map<string, TreeNode>();
