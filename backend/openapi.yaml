@@ -95,6 +95,13 @@ paths:
   /api/repos/{repoId}:
     get:
       summary: Получение информации о репозитории
+      description: >-
+        Возвращает метаданные репозитория. Для приватных репозиториев требуется
+        авторизация через cookie или токен репозитория.
+      security:
+        - cookieAuth: []
+        - repoTokenAuth: []
+        - {}
       parameters:
         - in: path
           name: repoId
@@ -139,6 +146,13 @@ paths:
   /api/repos/{repoId}/branches:
     get:
       summary: Список веток
+      description: >-
+        Возвращает ветки репозитория. Для приватных репозиториев используйте
+        cookie-сессию или заголовок `X-Repo-Token`.
+      security:
+        - cookieAuth: []
+        - repoTokenAuth: []
+        - {}
       parameters:
         - in: path
           name: repoId
@@ -150,8 +164,10 @@ paths:
           description: Список веток
     post:
       summary: Создание ветки
+      description: Требуется право записи (пользователь или токен `write`).
       security:
         - cookieAuth: []
+        - repoTokenAuth: []
       parameters:
         - in: path
           name: repoId
@@ -170,8 +186,10 @@ paths:
   /api/repos/{repoId}/branches/{name}:
     delete:
       summary: Удаление ветки
+      description: Требуется право записи (cookie или токен `write`).
       security:
         - cookieAuth: []
+        - repoTokenAuth: []
       parameters:
         - in: path
           name: repoId
@@ -189,8 +207,10 @@ paths:
   /api/repos/{repoId}/checkout:
     post:
       summary: Переключение ветки
+      description: Требуется право записи (cookie или токен `write`).
       security:
         - cookieAuth: []
+        - repoTokenAuth: []
       parameters:
         - in: path
           name: repoId
@@ -212,6 +232,11 @@ paths:
   /api/repos/{repoId}/commits:
     get:
       summary: История коммитов
+      description: Доступно с cookie или токеном репозитория (для приватных проектов).
+      security:
+        - cookieAuth: []
+        - repoTokenAuth: []
+        - {}
       parameters:
         - in: path
           name: repoId
@@ -228,6 +253,11 @@ paths:
   /api/repos/{repoId}/diff:
     get:
       summary: Diff между двумя ревизиями
+      description: Доступно с cookie или токеном репозитория.
+      security:
+        - cookieAuth: []
+        - repoTokenAuth: []
+        - {}
       parameters:
         - in: path
           name: repoId
@@ -250,6 +280,11 @@ paths:
   /api/repos/{repoId}/tree:
     get:
       summary: Дерево файлов
+      description: Возвращает структуру файлов; поддерживает токены (`read` или `write`).
+      security:
+        - cookieAuth: []
+        - repoTokenAuth: []
+        - {}
       parameters:
         - in: path
           name: repoId
@@ -270,6 +305,11 @@ paths:
   /api/repos/{repoId}/file:
     get:
       summary: Получение содержимого файла
+      description: Доступно для приватных репозиториев через cookie или токен (`read`).
+      security:
+        - cookieAuth: []
+        - repoTokenAuth: []
+        - {}
       parameters:
         - in: path
           name: repoId
@@ -290,8 +330,10 @@ paths:
           description: Содержимое файла
     put:
       summary: Сохранение файла
+      description: Требует права записи (cookie или токен `write`).
       security:
         - cookieAuth: []
+        - repoTokenAuth: []
       parameters:
         - in: path
           name: repoId
@@ -309,8 +351,10 @@ paths:
           description: Файл сохранён
     delete:
       summary: Удаление файла
+      description: Требует права записи (cookie или токен `write`).
       security:
         - cookieAuth: []
+        - repoTokenAuth: []
       parameters:
         - in: path
           name: repoId
@@ -332,8 +376,10 @@ paths:
   /api/repos/{repoId}/folder:
     post:
       summary: Создание папки
+      description: Требует права записи (cookie или токен `write`).
       security:
         - cookieAuth: []
+        - repoTokenAuth: []
       parameters:
         - in: path
           name: repoId
@@ -355,6 +401,11 @@ paths:
   /api/repos/{repoId}/archive.zip:
     get:
       summary: Загрузка ZIP архива ветки
+      description: Поддерживает cookie и токены (`read` или `write`).
+      security:
+        - cookieAuth: []
+        - repoTokenAuth: []
+        - {}
       parameters:
         - in: path
           name: repoId
@@ -368,6 +419,79 @@ paths:
       responses:
         '200':
           description: ZIP архив
+  /api/repos/{repoId}/tokens:
+    get:
+      summary: Список токенов репозитория
+      description: Доступно только владельцу. Возвращает токены без открытого секрета.
+      security:
+        - cookieAuth: []
+      parameters:
+        - in: path
+          name: repoId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Коллекция токенов
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tokens:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/RepoToken'
+    post:
+      summary: Создание токена репозитория
+      description: Доступно только владельцу. Секрет отображается один раз в ответе.
+      security:
+        - cookieAuth: []
+      parameters:
+        - in: path
+          name: repoId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRepoTokenRequest'
+      responses:
+        '201':
+          description: Токен создан
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    $ref: '#/components/schemas/RepoToken'
+                  secret:
+                    type: string
+  /api/repos/{repoId}/tokens/{tokenId}:
+    delete:
+      summary: Удаление токена репозитория
+      description: Доступно только владельцу.
+      security:
+        - cookieAuth: []
+      parameters:
+        - in: path
+          name: repoId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: tokenId
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Токен удалён
   /api/repos/{repoId}/collaborators:
     post:
       summary: Добавление коллаборатора или присоединение по коду
@@ -413,6 +537,13 @@ components:
       type: apiKey
       in: cookie
       name: accessToken
+    repoTokenAuth:
+      type: apiKey
+      in: header
+      name: X-Repo-Token
+      description: >-
+        Токен доступа к репозиторию. Передавайте значение в формате
+        `tokenId.secret` в заголовке `X-Repo-Token` или как `Authorization: Token <значение>`.
   schemas:
     AuthRequest:
       type: object
@@ -481,3 +612,34 @@ components:
           type: string
         role:
           type: string
+    RepoToken:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        permission:
+          type: string
+          enum:
+            - read
+            - write
+        createdAt:
+          type: string
+          format: date-time
+        lastUsedAt:
+          type: string
+          format: date-time
+          nullable: true
+    CreateRepoTokenRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+        permission:
+          type: string
+          enum:
+            - read
+            - write

@@ -7,7 +7,8 @@ import { Dialog, Transition } from '@headlessui/react';
 import { CreateRepoForm } from '../pages/dashboard/CreateRepoForm.tsx';
 
 const navItems = [
-  { to: '/', label: 'Мои репозитории' }
+  { to: '/', label: 'Мои репозитории', end: true },
+  { to: '/docs', label: 'Документация' }
 ];
 
 export function AppLayout() {
@@ -30,7 +31,7 @@ export function AppLayout() {
                 <NavLink
                   key={item.to}
                   to={item.to}
-                  end
+                  end={item.end}
                   className={({ isActive }) =>
                     `rounded-full px-3 py-1 font-medium transition ${isActive ? 'bg-primary/10 text-primary dark:text-primary-dark' : 'hover:bg-slate-200/50 dark:hover:bg-slate-800/70'}`
                   }
@@ -86,7 +87,7 @@ export function AppLayout() {
                 <NavLink
                   key={item.to}
                   to={item.to}
-                  end
+                  end={item.end}
                   onClick={() => setMobileNavOpen(false)}
                   className={({ isActive }) =>
                     `block rounded-xl px-3 py-2 font-medium ${isActive ? 'bg-primary/10 text-primary dark:text-primary-dark' : 'hover:bg-slate-100 dark:hover:bg-slate-800'}`
@@ -158,7 +159,7 @@ function BottomNav({ onCreate }: { onCreate: () => void }) {
           <NavLink
             key={item.to}
             to={item.to}
-            end
+            end={item.end}
             className={({ isActive }) =>
               `flex flex-col items-center gap-1 ${isActive ? 'text-primary dark:text-primary-dark' : 'text-slate-500'}`
             }

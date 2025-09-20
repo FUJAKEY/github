@@ -38,7 +38,30 @@ export function createApp() {
   app.use(
     pinoHttp({
       logger,
-      customSuccessMessage: () => 'request completed'
+      autoLogging: {
+        ignore: (req) => req.url === '/api/health'
+      },
+      serializers: {
+        req(request) {
+          return {
+            id: request.id,
+            method: request.method,
+            url: request.url
+          };
+        },
+        res(response) {
+          return {
+            statusCode: response.statusCode
+          };
+        }
+      },
+      customLogLevel: (_req, res, err) => {
+        if (err || res.statusCode >= 500) return 'error';
+        if (res.statusCode >= 400) return 'warn';
+        return 'info';
+      },
+      customSuccessMessage: (req, res) => `${req.method} ${req.url} ${res.statusCode}`,
+      customErrorMessage: (req, _res, err) => `${req.method} ${req.url} failed: ${err?.message ?? 'error'}`
     })
   );
   app.use(attachUser);

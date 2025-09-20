@@ -67,4 +67,53 @@ describe('Repository lifecycle', () => {
     const deleteMessage = deleteDefault.body?.message ?? deleteDefault.text;
     expect(deleteMessage).toContain('default branch');
   });
+
+  it('allows repository tokens to read and write content', async () => {
+    const agent = request.agent(app);
+
+    await agent.post('/api/auth/register').send({ email: 'token-owner@example.com', password: 'password123' }).expect(201);
+
+    const repoRes = await agent
+      .post('/api/repos')
+      .send({ name: 'token-demo', description: 'Token repo', private: true })
+      .expect(201);
+
+    const repoId = repoRes.body.repo.id as string;
+
+    const tokenRes = await agent
+      .post(`/api/repos/${repoId}/tokens`)
+      .send({ name: 'ci-token', permission: 'write' })
+      .expect(201);
+
+    const secret = tokenRes.body.secret as string;
+    const tokenId = tokenRes.body.token.id as string;
+    expect(secret).toMatch(/\./);
+
+    const tokenClient = request(app);
+
+    await tokenClient.get(`/api/repos/${repoId}/branches`).set('x-repo-token', secret).expect(200);
+
+    await tokenClient
+      .put(`/api/repos/${repoId}/file`)
+      .set('x-repo-token', secret)
+      .send({
+        path: 'src/index.ts',
+        content: 'console.log("via token");',
+        branch: 'main',
+        message: 'Token update'
+      })
+      .expect(200);
+
+    const fileRes = await tokenClient
+      .get(`/api/repos/${repoId}/file`)
+      .set('x-repo-token', secret)
+      .query({ path: 'src/index.ts', branch: 'main' })
+      .expect(200);
+
+    expect(fileRes.body.content).toContain('via token');
+
+    await agent.delete(`/api/repos/${repoId}/tokens/${tokenId}`).expect(204);
+
+    await tokenClient.get(`/api/repos/${repoId}/branches`).set('x-repo-token', secret).expect(403);
+  });
 });

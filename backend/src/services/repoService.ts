@@ -7,7 +7,7 @@ import { init as gitInit, add as gitAdd, commit as gitCommit } from 'isomorphic-
 import { z } from 'zod';
 
 import { appEnv } from '../config/env.js';
-import { RepoCollaborator, RepoMetadata } from '../types/domain.js';
+import { RepoAccessToken, RepoCollaborator, RepoMetadata } from '../types/domain.js';
 import { ensureDir, pathExists, writeJsonFile } from '../utils/fs.js';
 import { slugify } from '../utils/slugify.js';
 import { withRepoLock } from '../utils/locks.js';
@@ -107,6 +107,7 @@ export async function createRepository(
   };
 
   await writeJsonFile(path.join(repoDir, repoJsonName), metadata);
+  await writeJsonFile(path.join(repoDir, 'tokens.json'), [] as RepoAccessToken[]);
 
   const commitAuthor: CommitIdentity =
     author ?? {

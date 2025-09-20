@@ -26,7 +26,8 @@ export function errorHandler(err: unknown, req: Request, res: Response): void {
     res.status(400).json({ message: 'Validation error', issues: err.errors });
     return;
   }
-  logger.error({ err }, 'Unhandled error');
+  const errorMessage = err instanceof Error ? err.message : String(err);
+  logger.error({ message: errorMessage, path: req.originalUrl }, 'Unhandled error');
   const status = getStatus(err);
   const message = err instanceof Error ? err.message : 'Internal Server Error';
   res.status(status).json({ message });

@@ -33,6 +33,14 @@ export interface CommitInfo {
   author: { name: string; email: string };
 }
 
+export interface RepoToken {
+  id: string;
+  name: string;
+  permission: 'read' | 'write';
+  createdAt: string;
+  lastUsedAt?: string;
+}
+
 interface RepoState {
   repos: RepoSummary[];
   reposLoading: boolean;
@@ -43,6 +51,8 @@ interface RepoState {
   commits: CommitInfo[];
   selectedFile?: { path: string; content: string; branch: string };
   diff?: string;
+  tokens: RepoToken[];
+  generatedToken?: { token: RepoToken; secret: string } | null;
   fetchRepos: () => Promise<void>;
   createRepo: (payload: { name: string; description?: string; private?: boolean }) => Promise<RepoSummary>;
   loadRepo: (repoId: string) => Promise<void>;
@@ -63,6 +73,12 @@ interface RepoState {
     payload: { name?: string; description?: string; private?: boolean; rotateInviteCode?: boolean }
   ) => Promise<void>;
   removeCollaborator: (repoId: string, userId: string) => Promise<void>;
+  fetchTokens: (repoId: string) => Promise<void>;
+  createToken: (
+    repoId: string,
+    payload: { name: string; permission: 'read' | 'write' }
+  ) => Promise<{ token: RepoToken; secret: string }>;
+  deleteToken: (repoId: string, tokenId: string) => Promise<void>;
   clearCurrent: () => void;
 }
 
@@ -76,6 +92,8 @@ export const useRepoStore = create<RepoState>((set, get) => ({
   commits: [],
   selectedFile: undefined,
   diff: undefined,
+  tokens: [],
+  generatedToken: null,
   async fetchRepos() {
     set({ reposLoading: true });
     try {
@@ -170,7 +188,29 @@ export const useRepoStore = create<RepoState>((set, get) => ({
     await api.delete(`/repos/${repoId}/collaborators/${userId}`);
     await get().loadRepo(repoId);
   },
+  async fetchTokens(repoId) {
+    const response = await api.get(`/repos/${repoId}/tokens`);
+    set({ tokens: response.data.tokens, generatedToken: null });
+  },
+  async createToken(repoId, payload) {
+    const response = await api.post(`/repos/${repoId}/tokens`, payload);
+    const created: RepoToken = response.data.token;
+    set((state) => ({ tokens: [created, ...state.tokens], generatedToken: response.data }));
+    return response.data as { token: RepoToken; secret: string };
+  },
+  async deleteToken(repoId, tokenId) {
+    await api.delete(`/repos/${repoId}/tokens/${tokenId}`);
+    set((state) => ({ tokens: state.tokens.filter((token) => token.id !== tokenId) }));
+  },
   clearCurrent() {
-    set({ currentRepo: null, tree: [], commits: [], branches: [], selectedFile: undefined });
+    set({
+      currentRepo: null,
+      tree: [],
+      commits: [],
+      branches: [],
+      selectedFile: undefined,
+      tokens: [],
+      generatedToken: null
+    });
   }
 }));

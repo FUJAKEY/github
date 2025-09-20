@@ -31,6 +31,12 @@ import {
 } from '../services/gitService.js';
 import { findUserById } from '../services/userService.js';
 import { logAudit } from '../services/auditService.js';
+import {
+  listRepoTokens,
+  createRepoToken,
+  deleteRepoToken
+} from '../services/repoTokenService.js';
+import type { RepoActor } from '../middleware/auth.js';
 import type { RepoMetadata } from '../types/domain.js';
 import type { RepoPermission } from '../services/repoService.js';
 
@@ -87,23 +93,16 @@ router.get('/', async (req, res, next) => {
   }
 });
 
-router.get('/:repoId', async (req, res, next) => {
-  try {
-    const repo = await getRepoById(req.params.repoId);
-    if (!repo) {
-      res.status(404).json({ message: 'Repository not found' });
-      return;
-    }
-    const permission = resolveUserPermission(req.user?.id ?? null, repo.metadata);
-    if (permission === 'none') {
-      res.status(403).json({ message: 'Repository is private' });
-      return;
-    }
-    res.json({ repo: formatRepoResponse(repo.metadata, permission), permission });
-  } catch (error) {
-    next(error);
+router.get(
+  '/:repoId',
+  requireRepoPermission('read', { allowToken: true }),
+  (req, res) => {
+    const descriptor = res.locals.repo!;
+    const access = res.locals.repoAccess;
+    const permission = access?.permission ?? resolveUserPermission(req.user?.id ?? null, descriptor.metadata);
+    res.json({ repo: formatRepoResponse(descriptor.metadata, permission), permission });
   }
-});
+);
 
 router.patch('/:repoId', requireAuth, requireRepoPermission('owner'), async (req, res, next) => {
   try {
@@ -138,7 +137,7 @@ router.delete('/:repoId', requireAuth, requireRepoPermission('owner'), async (re
   }
 });
 
-router.get('/:repoId/branches', requireRepoPermission('read'), async (req, res, next) => {
+router.get('/:repoId/branches', requireRepoPermission('read', { allowToken: true }), async (req, res, next) => {
   try {
     const repoDescriptor = res.locals.repo!;
     const current = await getCurrentBranch(repoDescriptor.dir);
@@ -149,7 +148,7 @@ router.get('/:repoId/branches', requireRepoPermission('read'), async (req, res, 
   }
 });
 
-router.post('/:repoId/branches', requireAuth, requireRepoPermission('write'), async (req, res, next) => {
+router.post('/:repoId/branches', requireRepoPermission('write', { allowToken: true }), async (req, res, next) => {
   try {
     const schema = z.object({
       name: z.string().min(1),
@@ -164,7 +163,7 @@ router.post('/:repoId/branches', requireAuth, requireRepoPermission('write'), as
   }
 });
 
-router.delete('/:repoId/branches/:name', requireAuth, requireRepoPermission('write'), async (req, res, next) => {
+router.delete('/:repoId/branches/:name', requireRepoPermission('write', { allowToken: true }), async (req, res, next) => {
   try {
     const repoDescriptor = res.locals.repo!;
     await deleteBranch(repoDescriptor.metadata, repoDescriptor.dir, req.params.name);
@@ -174,7 +173,7 @@ router.delete('/:repoId/branches/:name', requireAuth, requireRepoPermission('wri
   }
 });
 
-router.post('/:repoId/checkout', requireAuth, requireRepoPermission('write'), async (req, res, next) => {
+router.post('/:repoId/checkout', requireRepoPermission('write', { allowToken: true }), async (req, res, next) => {
   try {
     const schema = z.object({ branch: z.string().min(1) });
     const input = schema.parse(req.body);
@@ -186,7 +185,7 @@ router.post('/:repoId/checkout', requireAuth, requireRepoPermission('write'), as
   }
 });
 
-router.get('/:repoId/commits', requireRepoPermission('read'), async (req, res, next) => {
+router.get('/:repoId/commits', requireRepoPermission('read', { allowToken: true }), async (req, res, next) => {
   try {
     const branch = (req.query.branch as string) ?? res.locals.repo!.metadata.defaultBranch;
     const commits = await listCommits(res.locals.repo!.dir, branch);
@@ -196,7 +195,7 @@ router.get('/:repoId/commits', requireRepoPermission('read'), async (req, res, n
   }
 });
 
-router.get('/:repoId/diff', requireRepoPermission('read'), async (req, res, next) => {
+router.get('/:repoId/diff', requireRepoPermission('read', { allowToken: true }), async (req, res, next) => {
   try {
     const from = req.query.from as string;
     const to = req.query.to as string;
@@ -211,7 +210,7 @@ router.get('/:repoId/diff', requireRepoPermission('read'), async (req, res, next
   }
 });
 
-router.get('/:repoId/tree', requireRepoPermission('read'), async (req, res, next) => {
+router.get('/:repoId/tree', requireRepoPermission('read', { allowToken: true }), async (req, res, next) => {
   try {
     const branch = (req.query.branch as string) ?? res.locals.repo!.metadata.defaultBranch;
     const targetPath = (req.query.path as string) ?? '';
@@ -222,7 +221,7 @@ router.get('/:repoId/tree', requireRepoPermission('read'), async (req, res, next
   }
 });
 
-router.get('/:repoId/file', requireRepoPermission('read'), async (req, res, next) => {
+router.get('/:repoId/file', requireRepoPermission('read', { allowToken: true }), async (req, res, next) => {
   try {
     const branch = (req.query.branch as string) ?? res.locals.repo!.metadata.defaultBranch;
     const filePath = req.query.path as string;
@@ -237,7 +236,7 @@ router.get('/:repoId/file', requireRepoPermission('read'), async (req, res, next
   }
 });
 
-router.put('/:repoId/file', requireAuth, requireRepoPermission('write'), async (req, res, next) => {
+router.put('/:repoId/file', requireRepoPermission('write', { allowToken: true }), async (req, res, next) => {
   try {
     const schema = z.object({
       path: z.string().min(1),
@@ -247,21 +246,15 @@ router.put('/:repoId/file', requireAuth, requireRepoPermission('write'), async (
     });
     const input = schema.parse(req.body);
     const repoDescriptor = res.locals.repo!;
-    const author = await findUserById(req.user!.id);
-    if (!author) {
-      res.status(404).json({ message: 'User not found' });
-      return;
-    }
+    const access = res.locals.repoAccess;
+    const { identity, auditActorId } = await resolveCommitActor(access?.actor ?? null);
     await writeFileToRepo(repoDescriptor.metadata, repoDescriptor.dir, input.path, input.content, input.branch, {
       message: input.message,
-      author: {
-        name: author.email.split('@')[0],
-        email: author.email
-      }
+      author: identity
     });
     await logAudit({
       type: 'repo.file.write',
-      actorId: req.user!.id,
+      actorId: auditActorId,
       repoId: repoDescriptor.metadata.id,
       metadata: { path: input.path }
     });
@@ -271,7 +264,7 @@ router.put('/:repoId/file', requireAuth, requireRepoPermission('write'), async (
   }
 });
 
-router.delete('/:repoId/file', requireAuth, requireRepoPermission('write'), async (req, res, next) => {
+router.delete('/:repoId/file', requireRepoPermission('write', { allowToken: true }), async (req, res, next) => {
   try {
     const branch = (req.query.branch as string) ?? res.locals.repo!.metadata.defaultBranch;
     const filePath = req.query.path as string;
@@ -280,17 +273,17 @@ router.delete('/:repoId/file', requireAuth, requireRepoPermission('write'), asyn
       res.status(400).json({ message: 'path parameter is required' });
       return;
     }
-    const author = await findUserById(req.user!.id);
-    if (!author) {
-      res.status(404).json({ message: 'User not found' });
-      return;
-    }
+    const access = res.locals.repoAccess;
+    const { identity, auditActorId } = await resolveCommitActor(access?.actor ?? null);
     await deleteFileFromRepo(res.locals.repo!.metadata, res.locals.repo!.dir, filePath, branch, {
       message,
-      author: {
-        name: author.email.split('@')[0],
-        email: author.email
-      }
+      author: identity
+    });
+    await logAudit({
+      type: 'repo.file.deleted',
+      actorId: auditActorId,
+      repoId: res.locals.repo!.metadata.id,
+      metadata: { path: filePath }
     });
     res.status(204).send();
   } catch (error) {
@@ -298,7 +291,7 @@ router.delete('/:repoId/file', requireAuth, requireRepoPermission('write'), asyn
   }
 });
 
-router.post('/:repoId/folder', requireAuth, requireRepoPermission('write'), async (req, res, next) => {
+router.post('/:repoId/folder', requireRepoPermission('write', { allowToken: true }), async (req, res, next) => {
   try {
     const schema = z.object({ path: z.string().min(1) });
     const input = schema.parse(req.body);
@@ -309,7 +302,7 @@ router.post('/:repoId/folder', requireAuth, requireRepoPermission('write'), asyn
   }
 });
 
-router.get('/:repoId/archive.zip', requireRepoPermission('read'), async (req, res, next) => {
+router.get('/:repoId/archive.zip', requireRepoPermission('read', { allowToken: true }), async (req, res, next) => {
   try {
     const branch = (req.query.branch as string) ?? res.locals.repo!.metadata.defaultBranch;
     res.setHeader('Content-Type', 'application/zip');
@@ -319,6 +312,61 @@ router.get('/:repoId/archive.zip', requireRepoPermission('read'), async (req, re
     next(error);
   }
 });
+
+router.get(
+  '/:repoId/tokens',
+  requireAuth,
+  requireRepoPermission('owner', { requireUser: true }),
+  async (_req, res, next) => {
+    try {
+      const repoDescriptor = res.locals.repo!;
+      const tokens = await listRepoTokens(repoDescriptor.metadata, repoDescriptor.dir);
+      res.json({ tokens });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+router.post(
+  '/:repoId/tokens',
+  requireAuth,
+  requireRepoPermission('owner', { requireUser: true }),
+  async (req, res, next) => {
+    try {
+      const schema = z.object({
+        name: z.string().min(1),
+        permission: z.enum(['read', 'write']).default('read')
+      });
+      const input = schema.parse(req.body);
+      const repoDescriptor = res.locals.repo!;
+      const { token, secret } = await createRepoToken(
+        repoDescriptor.metadata,
+        repoDescriptor.dir,
+        input,
+        req.user!.id
+      );
+      res.status(201).json({ token, secret });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+router.delete(
+  '/:repoId/tokens/:tokenId',
+  requireAuth,
+  requireRepoPermission('owner', { requireUser: true }),
+  async (req, res, next) => {
+    try {
+      const repoDescriptor = res.locals.repo!;
+      await deleteRepoToken(repoDescriptor.metadata, repoDescriptor.dir, req.params.tokenId, req.user!.id);
+      res.status(204).send();
+    } catch (error) {
+      next(error);
+    }
+  }
+);
 
 router.post('/:repoId/collaborators', requireAuth, async (req, res, next) => {
   try {
@@ -393,6 +441,41 @@ type RepoResponse = Omit<RepoMetadata, 'inviteCode'> & {
   inviteCode?: string;
   permission: RepoPermission;
 };
+
+function createHttpError(status: number, message: string): Error & { status: number } {
+  const error = new Error(message) as Error & { status: number };
+  error.status = status;
+  return error;
+}
+
+async function resolveCommitActor(actor: RepoActor | null): Promise<{
+  identity: { name: string; email: string };
+  auditActorId: string | null;
+}> {
+  if (!actor) {
+    throw createHttpError(403, 'Repository write requires authentication');
+  }
+  if (actor.type === 'user') {
+    const author = await findUserById(actor.userId);
+    if (!author) {
+      throw createHttpError(404, 'User not found');
+    }
+    return {
+      identity: {
+        name: author.email.split('@')[0],
+        email: author.email
+      },
+      auditActorId: author.id
+    };
+  }
+  return {
+    identity: {
+      name: `token:${actor.token.name}`,
+      email: `token-${actor.token.id}@mini-github.local`
+    },
+    auditActorId: `token:${actor.token.id}`
+  };
+}
 
 function formatRepoResponse(repo: RepoMetadata, permission: RepoPermission): RepoResponse {
   const { inviteCode, ...rest } = repo;
