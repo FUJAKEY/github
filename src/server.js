@@ -12,6 +12,11 @@ const SERVER_ROOT = path.resolve(__dirname, '..');
 const REPO_ROOT = path.join(SERVER_ROOT, 'Repo');
 fs.mkdirSync(REPO_ROOT, { recursive: true });
 
+const legacyUploadsDir = path.join(SERVER_ROOT, 'uploads');
+if (fs.existsSync(legacyUploadsDir)) {
+  fs.rmSync(legacyUploadsDir, { recursive: true, force: true });
+}
+
 app.use(express.json({ limit: '50mb' }));
 
 const upload = multer({ storage: multer.memoryStorage() });
@@ -48,6 +53,45 @@ async function extractZipArchive(zipBuffer, destinationPath) {
   const zip = new AdmZip(zipBuffer);
   const entries = zip.getEntries();
   const extractedItems = [];
+  const seenFilePaths = new Set();
+
+  for (const entry of entries) {
+    const entryAbsolutePath = path.resolve(destinationPath, entry.entryName);
+    const relativeToDestination = path.relative(destinationPath, entryAbsolutePath);
+    if (relativeToDestination.startsWith('..') || path.isAbsolute(relativeToDestination)) {
+      const error = new Error(`Небезопасный путь внутри архива: ${entry.entryName}`);
+      error.statusCode = 400;
+      throw error;
+    }
+    ensureInsideRepo(entryAbsolutePath);
+
+    const normalizedAbsolutePath = path.normalize(entryAbsolutePath);
+    if (!entry.isDirectory) {
+      if (seenFilePaths.has(normalizedAbsolutePath)) {
+        const duplicateError = new Error(`Архив содержит дублирующийся файл: ${entry.entryName}`);
+        duplicateError.statusCode = 400;
+        throw duplicateError;
+      }
+      seenFilePaths.add(normalizedAbsolutePath);
+    }
+
+    try {
+      const stats = await fsPromises.stat(entryAbsolutePath);
+      if (entry.isDirectory && stats.isDirectory()) {
+        continue;
+      }
+
+      const conflictError = new Error(
+        `Путь ${toRepoRelative(entryAbsolutePath)} уже существует. Удалите его перед распаковкой архива.`
+      );
+      conflictError.statusCode = 409;
+      throw conflictError;
+    } catch (error) {
+      if (error.code !== 'ENOENT') {
+        throw error;
+      }
+    }
+  }
 
   for (const entry of entries) {
     const entryAbsolutePath = path.resolve(destinationPath, entry.entryName);
@@ -177,6 +221,17 @@ app.post('/api/upload', upload.single('file'), async (req, res, next) => {
     const finalFileName = path.basename(req.file.originalname);
     const finalDestination = path.join(destinationPath, finalFileName);
     const finalAbsolutePath = ensureInsideRepo(finalDestination);
+
+    try {
+      await fsPromises.access(finalAbsolutePath, fs.constants.F_OK);
+      return res.status(409).json({
+        error: `Файл ${toRepoRelative(finalAbsolutePath)} уже существует. Удалите его или выберите другое имя.`
+      });
+    } catch (accessError) {
+      if (accessError.code !== 'ENOENT') {
+        throw accessError;
+      }
+    }
 
     await fsPromises.mkdir(path.dirname(finalAbsolutePath), { recursive: true });
     await fsPromises.writeFile(finalAbsolutePath, req.file.buffer);
